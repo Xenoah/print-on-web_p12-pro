@@ -41,8 +41,8 @@ footer{border-top:1px solid var(--line);padding-top:20px;margin-top:27px;display
 <p class="hint">縦横比を保って収めます。透明部分は白になります。</p>
 </div>
 <hr class="divider">
-<div class="length-mode"><label class="check"><input id="autoLength" type="checkbox" aria-describedby="autoLengthHelp">自動カット長</label><p id="autoLengthHelp" class="hint">内容と余白に合わせて 15〜200 mm に調整します。<br>切り取りは本体のカッターで行います。</p></div>
-<div class="row"><div class="field"><label id="lengthLabel" for="length">ラベルの長さ <span class="unit">mm</span></label><input id="length" type="number" min="15" max="200" step="1" value="50"><output id="autoLengthValue" class="computed-length" aria-labelledby="lengthLabel" aria-live="polite" hidden></output></div><div class="field"><label for="margin">左右の余白 <span class="unit">mm</span></label><input id="margin" type="number" min="0" max="10" step="0.5" value="2"></div></div>
+<div class="length-mode"><label class="check"><input id="autoLength" type="checkbox" aria-describedby="autoLengthHelp">自動カット長</label><p id="autoLengthHelp" class="hint">内容と余白に合わせて 15〜2000 mm に調整します。<br>切り取りは本体のカッターで行います。</p></div>
+<div class="row"><div class="field"><label id="lengthLabel" for="length">ラベルの長さ <span class="unit">mm</span></label><input id="length" type="number" min="15" max="2000" step="1" value="50"><output id="autoLengthValue" class="computed-length" aria-labelledby="lengthLabel" aria-live="polite" hidden></output></div><div class="field"><label for="margin">左右の余白 <span class="unit">mm</span></label><input id="margin" type="number" min="0" max="10" step="0.5" value="2"></div></div>
 <div class="checks"><label class="check"><input id="frame" type="checkbox">囲み枠</label><label class="check"><input id="invert" type="checkbox">白黒反転</label><label class="check"><input id="flip" type="checkbox">180° 回転</label></div>
 <div class="savebar"><button id="saveDesign" class="quiet" type="button">↓ デザイン保存</button><button id="loadDesign" class="quiet" type="button">↑ 読み込み</button><input id="designFile" type="file" accept=".json,application/json" hidden></div><div id="draftStatus" class="draft">文字と設定は、このブラウザに自動保存します。</div>
 </section>
@@ -62,7 +62,7 @@ footer{border-top:1px solid var(--line);padding-top:20px;margin-top:27px;display
 // PepperPhil/phomemo_p12 (phomemo/print_p12.py) and transcriptionstream/phomymo.
 // A horizontal label is rotated clockwise into 96-dot scan lines; black = 1, MSB first.
 const $ = id => document.getElementById(id);
-const DPI = 203, HEAD_DOTS = 96, DOTS_PER_MM = DPI / 25.4;
+const DPI = 203, HEAD_DOTS = 96, DOTS_PER_MM = DPI / 25.4, MAX_LENGTH_MM = 2000;
 const STORAGE_KEY = 'p12-studio-v1';
 const FONTS = {sans:'"Yu Gothic","Meiryo",sans-serif',serif:'"Yu Mincho","MS Mincho",serif',mono:'"MS Gothic",Consolas,monospace'};
 const INIT = [[0x1f,0x11,0x38],[0x1f,0x11,0x11,0x1f,0x11,0x12,0x1f,0x11,0x09,0x1f,0x11,0x13],[0x1f,0x11,0x09],[0x1f,0x11,0x19,0x1f,0x11,0x11],[0x1f,0x11,0x19],[0x1f,0x11,0x07]];
@@ -79,7 +79,7 @@ function message(text, type='info') { $('message').textContent=text; $('message'
 function clearMessage() { $('message').hidden=true; }
 function hex(bytes) { return Array.from(bytes, b=>b.toString(16).padStart(2,'0')).join(' '); }
 async function timeout(promise, ms, text) { let timer; try {return await Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(text)),ms);})]);} finally {clearTimeout(timer);} }
-function settings() {return {labelText:$('labelText').value,fontFamily:$('fontFamily').value,alignment:$('alignment').value,fontSize:bounded($('fontSize').value,1,10,5),bold:$('bold').checked,autoFit:$('autoFit').checked,autoLength:$('autoLength').checked,length:Math.round(bounded($('length').value,15,200,50)),margin:bounded($('margin').value,0,10,2),frame:$('frame').checked,invert:$('invert').checked,flip:$('flip').checked,threshold:bounded($('threshold').value,20,235,160)};}
+function settings() {return {labelText:$('labelText').value,fontFamily:$('fontFamily').value,alignment:$('alignment').value,fontSize:bounded($('fontSize').value,1,10,5),bold:$('bold').checked,autoFit:$('autoFit').checked,autoLength:$('autoLength').checked,length:Math.round(bounded($('length').value,15,MAX_LENGTH_MM,50)),margin:bounded($('margin').value,0,10,2),frame:$('frame').checked,invert:$('invert').checked,flip:$('flip').checked,threshold:bounded($('threshold').value,20,235,160)};}
 function restoreSettings(data) {$('autoLength').checked=data.autoLength===true;for(const id of SETTING_IDS){if(!(id in data))continue;const el=$(id);if(el.type==='checkbox'){if(typeof data[id]==='boolean')el.checked=data[id];}else if(el.tagName==='SELECT'){if([...el.options].some(o=>o.value===data[id]))el.value=data[id];}else if(el.type==='number'||el.type==='range'){el.value=bounded(data[id],Number(el.min),Number(el.max),Number(el.defaultValue));}else if(typeof data[id]==='string'){el.value=data[id].slice(0,1200);}}}
 function saveDraft() {try{localStorage.setItem(STORAGE_KEY,JSON.stringify(settings()));$('draftStatus').textContent='文字と設定を自動保存しました。画像はデザイン保存で残せます。';}catch{$('draftStatus').textContent='自動保存できません。「デザイン保存」で残せます。';}}
 function switchMode(next) {mode=next;for(const kind of ['text','image']){const selected=kind===mode;$(kind+'Tab').setAttribute('aria-selected',String(selected));$(kind+'Tab').tabIndex=selected?0:-1;$(kind+'Panel').hidden=!selected;}render();}
@@ -116,7 +116,7 @@ function resolveLabelLength(s,ctx,contentMode,image) {
   const requiredDots=Math.ceil(contentWidth)+2*inset;
   // Match the rounded canvas width so an extra millimetre is not added at pixel boundaries.
   const length=Math.max(15,Math.ceil((requiredDots-.5)/DOTS_PER_MM));
-  return {length:Math.min(200,length),capped:length>200};
+  return {length:Math.min(MAX_LENGTH_MM,length),capped:length>MAX_LENGTH_MM};
 }
 function render() {
   const s=settings(), canvas=$('preview'), ctx=canvas.getContext('2d',{willReadFrequently:true});
@@ -155,7 +155,7 @@ function render() {
   ctx.putImageData(raster,0,0);
   if(!hasInk&&renderValid){renderValid=false;note='印刷する黒い部分がありません。画像の白黒の境界を調整してください。';}
   $('preview').setAttribute('aria-label',mode==='text'?'ラベルの印刷プレビュー: '+s.labelText:'選択した画像の白黒印刷プレビュー');
-  if(resolved.capped)note='自動カット長の上限 200 mm に達しています。'+(note||'内容を枠内に縮小しています。');
+  if(resolved.capped)note='自動カット長の上限 '+MAX_LENGTH_MM+' mm に達しています。'+(note||'内容を枠内に縮小しています。');
   $('autoLengthValue').value=renderedLength+' mm（自動）';
   $('measurement').textContent=renderedLength+' mm × 12 mm'+(s.autoLength?' · 自動':'');$('pixelInfo').textContent=canvas.width+' × 96 dots · 203 dpi';
   $('thresholdValue').value=s.threshold;$('renderNote').textContent=note;$('renderNote').hidden=!note;

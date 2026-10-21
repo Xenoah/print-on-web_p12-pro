@@ -14,19 +14,19 @@ const tests = String.raw`
   const layoutSettings={labelText:'12345678',fontFamily:'sans',fontSize:4,bold:false,autoFit:true,autoLength:true,length:80,margin:2,frame:false};
   const measuringContext={font:'',save(){},restore(){},measureText(line){return {width:line.length*parseFloat(this.font.split(' ')[1])};}};
   const lengthOf=(overrides={},kind='text',image=null)=>resolveLabelLength({...layoutSettings,...overrides},measuringContext,kind,image);
-  check('manual length ignores content and preserves fixed setting',()=>assert.deepEqual(lengthOf({autoLength:false,length:80}),{length:80,capped:false}));
+  check('manual length accepts 2000 mm and clamps larger input',()=>{const input=$('length');input.value='2000';assert.equal(settings().length,2000);assert.deepEqual(lengthOf({autoLength:false,length:settings().length}),{length:2000,capped:false});input.value='2001';assert.equal(settings().length,2000);const attrs=html.match(/<input id="length"[^>]+>/)[0];assert.match(attrs,/max="2000"/);input.type='number';input.min='15';input.max='2000';input.defaultValue='50';restoreSettings({length:2000});assert.equal(settings().length,2000);input.value='50';});
   check('automatic length grows and shrinks with text, includes both margins',()=>{assert.equal(lengthOf().length,36);assert.equal(lengthOf({labelText:'12'}).length,15);assert.equal(lengthOf({labelText:'123456789012'}).length,52);assert.equal(lengthOf({margin:4}).length,40);});
   check('automatic length fits height before measuring multiline text',()=>{assert.equal(lengthOf({labelText:'12345678\n12',fontSize:10}).length,38);assert.equal(lengthOf({labelText:'12345678\n12',fontSize:10,autoFit:false}).length,85);});
   check('automatic length reserves room inside a frame',()=>{assert.equal(lengthOf({margin:0}).length,32);assert.equal(lengthOf({margin:0,frame:true}).length,35);});
   check('empty automatic labels use minimum length',()=>assert.deepEqual(lengthOf({labelText:''}),{length:15,capped:false}));
   check('automatic image length uses aspect ratio at available tape height',()=>{assert.equal(lengthOf({},'image',{width:200,height:100}).length,24);assert.equal(lengthOf({},'image',{width:100,height:200}).length,15);assert.equal(lengthOf({},'image',null).length,15);});
-  check('automatic length caps long text and wide images at 200 mm',()=>{assert.deepEqual(lengthOf({labelText:'A'.repeat(100)}),{length:200,capped:true});assert.deepEqual(lengthOf({},'image',{width:10000,height:1}),{length:200,capped:true});});
+  check('automatic length exceeds 200 mm and caps at 2000 mm',()=>{assert.deepEqual(lengthOf({labelText:'A'.repeat(100)}),{length:404,capped:false});assert.deepEqual(lengthOf({labelText:'A'.repeat(1000)}),{length:2000,capped:true});assert.deepEqual(lengthOf({},'image',{width:10000,height:1}),{length:2000,capped:true});});
   check('automatic mode keeps the manual length in saved settings',()=>{elements.set('autoLength',{checked:true});assert.equal(settings().autoLength,true);assert.equal(settings().length,50);syncUI();assert.equal(elements.get('length').disabled,true);assert.equal(elements.get('length').hidden,true);assert.equal(elements.get('autoLengthValue').hidden,false);});
   check('legacy designs restore fixed length mode',()=>{restoreSettings({});assert.equal(settings().autoLength,false);syncUI();assert.equal(elements.get('length').disabled,false);assert.equal(elements.get('length').hidden,false);});
   function bitmap(w,points=[]){const p=new Uint8ClampedArray(w*96*4).fill(255);for(const [x,y] of points)p[(y*w+x)*4]=0;return {width:w,height:96,getContext:()=>({getImageData:()=>({data:p})})};}
   check('P12 clockwise rotation and MSB-first packing',()=>{const r=buildRaster(bitmap(3,[[0,0],[1,95],[2,87]]));const expected=new Uint8Array(36);expected[11]=1;expected[12]=128;expected[25]=128;assert.deepEqual(r.bytes,expected);assert.deepEqual([...r.header],[27,64,29,118,48,0,12,0,3,0]);});
   check('blank raster remains blank',()=>assert.equal(buildRaster(bitmap(17)).bytes.some(Boolean),false));
-  check('maximum label has 12 bytes per scan line, little-endian row count',()=>{const r=buildRaster(bitmap(1598));assert.equal(r.bytes.length,1598*12);assert.deepEqual([...r.header.slice(-2)],[62,6]);});
+  check('2000 mm label has 15984 rows, 191808 bytes and correct first/last pixels',()=>{const rows=Math.round(2000*DOTS_PER_MM);assert.equal(rows,15984);const r=buildRaster(bitmap(rows,[[0,0],[rows-1,95]]));assert.equal(r.bytes.length,191808);assert.deepEqual([...r.header.slice(-2)],[112,62]);assert.equal(r.bytes[11],1);assert.equal(r.bytes[(rows-1)*12],128);assert.equal(r.bytes.reduce((sum,b)=>sum+b,0),129);});
   check('invalid head width rejected',()=>assert.throws(()=>buildRaster({width:400,height:128}),/不正/));
   const channel=new ResponseChannel();channel.send=async()=>channel.receive(new Uint8Array([26,8,80]));
   assert.deepEqual([...(await channel.query([31,17,9],10))],[26,8,80]);assert.equal(channel.waiters.size,0);console.log('PASS synchronous reply is not lost');passed++;
@@ -49,5 +49,5 @@ const tests = String.raw`
   console.log(passed+' checks passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
 `;
-const context = vm.createContext({document,elements,console,assert,process,navigator:{serial:{}},isSecureContext:true,Uint8Array,Uint8ClampedArray,ReadableStream,WritableStream,setTimeout,clearTimeout});
+const context = vm.createContext({document,elements,html,console,assert,process,navigator:{serial:{}},isSecureContext:true,Uint8Array,Uint8ClampedArray,ReadableStream,WritableStream,setTimeout,clearTimeout});
 vm.runInContext(script.slice(0,script.indexOf('for(const id of SETTING_IDS)$(id)'))+tests,context);

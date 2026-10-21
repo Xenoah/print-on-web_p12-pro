@@ -17,6 +17,7 @@ footer{border-top:1px solid var(--line);padding-top:20px;margin-top:27px;display
 @media(max-width:1000px){.workspace{grid-template-columns:310px minmax(0,1fr);gap:16px}main{padding:28px 24px}.top{padding:22px 24px}.panel{padding:19px}.preview-panel{padding:0}.connection-title{flex-wrap:wrap}.preview-area{padding:40px 22px;min-height:240px}}
 @media(max-width:760px){.workspace{grid-template-columns:1fr}.top{padding:19px 20px}main{padding:25px 18px}.intro{align-items:start}.intro h1{font-size:26px}.intro .spec{display:none}.local{font-size:10px}.preview-area{min-height:220px}.connection-title{flex-wrap:nowrap}.preview-head{padding:20px}.preview-foot{padding:12px 20px}.editor{order:2}.right{display:contents}.preview-panel{order:1}.connection{order:0}.print-panel{order:3}.message{order:4}.workspace{gap:16px}.stack{display:contents}footer{flex-wrap:wrap}.help{margin-top:22px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+.computed-length{display:block;border:1px solid var(--line);border-radius:7px;background:#f1f5ec;padding:10px 11px;font-size:13px;color:var(--green)}.length-mode{margin-bottom:14px}.length-mode .hint{margin-top:7px}
 </style>
 </head>
 <body>
@@ -40,7 +41,8 @@ footer{border-top:1px solid var(--line);padding-top:20px;margin-top:27px;display
 <p class="hint">縦横比を保って収めます。透明部分は白になります。</p>
 </div>
 <hr class="divider">
-<div class="row"><div class="field"><label for="length">ラベルの長さ <span class="unit">mm</span></label><input id="length" type="number" min="15" max="200" step="1" value="50"></div><div class="field"><label for="margin">左右の余白 <span class="unit">mm</span></label><input id="margin" type="number" min="0" max="10" step="0.5" value="2"></div></div>
+<div class="length-mode"><label class="check"><input id="autoLength" type="checkbox" aria-describedby="autoLengthHelp">自動カット長</label><p id="autoLengthHelp" class="hint">内容と余白に合わせて 15〜200 mm に調整します。<br>切り取りは本体のカッターで行います。</p></div>
+<div class="row"><div class="field"><label id="lengthLabel" for="length">ラベルの長さ <span class="unit">mm</span></label><input id="length" type="number" min="15" max="200" step="1" value="50"><output id="autoLengthValue" class="computed-length" aria-labelledby="lengthLabel" aria-live="polite" hidden></output></div><div class="field"><label for="margin">左右の余白 <span class="unit">mm</span></label><input id="margin" type="number" min="0" max="10" step="0.5" value="2"></div></div>
 <div class="checks"><label class="check"><input id="frame" type="checkbox">囲み枠</label><label class="check"><input id="invert" type="checkbox">白黒反転</label><label class="check"><input id="flip" type="checkbox">180° 回転</label></div>
 <div class="savebar"><button id="saveDesign" class="quiet" type="button">↓ デザイン保存</button><button id="loadDesign" class="quiet" type="button">↑ 読み込み</button><input id="designFile" type="file" accept=".json,application/json" hidden></div><div id="draftStatus" class="draft">文字と設定は、このブラウザに自動保存します。</div>
 </section>
@@ -65,11 +67,11 @@ const STORAGE_KEY = 'p12-studio-v1';
 const FONTS = {sans:'"Yu Gothic","Meiryo",sans-serif',serif:'"Yu Mincho","MS Mincho",serif',mono:'"MS Gothic",Consolas,monospace'};
 const INIT = [[0x1f,0x11,0x38],[0x1f,0x11,0x11,0x1f,0x11,0x12,0x1f,0x11,0x09,0x1f,0x11,0x13],[0x1f,0x11,0x09],[0x1f,0x11,0x19,0x1f,0x11,0x11],[0x1f,0x11,0x19],[0x1f,0x11,0x07]];
 const FEED = new Uint8Array([0x1b,0x64,0x0d]);
-const SETTING_IDS = ['labelText','fontFamily','alignment','fontSize','bold','autoFit','length','margin','frame','invert','flip','threshold'];
+const SETTING_IDS = ['labelText','fontFamily','alignment','fontSize','bold','autoFit','autoLength','length','margin','frame','invert','flip','threshold'];
 const logLines = [];
 let mode = 'text', sourceImage = null, imageDataUrl = null, imageFilename = '', imageRevision = 0;
 let transport = null, busy = false, connecting = false, probing = false, stopAfterLabel = false, renderValid = true, hasInk = false;
-let renderTimer;
+let renderTimer, renderedLength = 50;
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 function bounded(value, min, max, fallback) { const n = Number(value); return Number.isFinite(n) ? Math.max(min,Math.min(max,n)) : fallback; }
 function log(text) { logLines.push(new Date().toLocaleTimeString('ja-JP')+' '+text); if(logLines.length>160)logLines.shift(); $('log').textContent=logLines.join('\n'); $('log').scrollTop=$('log').scrollHeight; }
@@ -77,13 +79,16 @@ function message(text, type='info') { $('message').textContent=text; $('message'
 function clearMessage() { $('message').hidden=true; }
 function hex(bytes) { return Array.from(bytes, b=>b.toString(16).padStart(2,'0')).join(' '); }
 async function timeout(promise, ms, text) { let timer; try {return await Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(text)),ms);})]);} finally {clearTimeout(timer);} }
-function settings() {return {labelText:$('labelText').value,fontFamily:$('fontFamily').value,alignment:$('alignment').value,fontSize:bounded($('fontSize').value,1,10,5),bold:$('bold').checked,autoFit:$('autoFit').checked,length:Math.round(bounded($('length').value,15,200,50)),margin:bounded($('margin').value,0,10,2),frame:$('frame').checked,invert:$('invert').checked,flip:$('flip').checked,threshold:bounded($('threshold').value,20,235,160)};}
-function restoreSettings(data) {for(const id of SETTING_IDS){if(!(id in data))continue;const el=$(id);if(el.type==='checkbox'){if(typeof data[id]==='boolean')el.checked=data[id];}else if(el.tagName==='SELECT'){if([...el.options].some(o=>o.value===data[id]))el.value=data[id];}else if(el.type==='number'||el.type==='range'){el.value=bounded(data[id],Number(el.min),Number(el.max),Number(el.defaultValue));}else if(typeof data[id]==='string'){el.value=data[id].slice(0,1200);}}}
+function settings() {return {labelText:$('labelText').value,fontFamily:$('fontFamily').value,alignment:$('alignment').value,fontSize:bounded($('fontSize').value,1,10,5),bold:$('bold').checked,autoFit:$('autoFit').checked,autoLength:$('autoLength').checked,length:Math.round(bounded($('length').value,15,200,50)),margin:bounded($('margin').value,0,10,2),frame:$('frame').checked,invert:$('invert').checked,flip:$('flip').checked,threshold:bounded($('threshold').value,20,235,160)};}
+function restoreSettings(data) {$('autoLength').checked=data.autoLength===true;for(const id of SETTING_IDS){if(!(id in data))continue;const el=$(id);if(el.type==='checkbox'){if(typeof data[id]==='boolean')el.checked=data[id];}else if(el.tagName==='SELECT'){if([...el.options].some(o=>o.value===data[id]))el.value=data[id];}else if(el.type==='number'||el.type==='range'){el.value=bounded(data[id],Number(el.min),Number(el.max),Number(el.defaultValue));}else if(typeof data[id]==='string'){el.value=data[id].slice(0,1200);}}}
 function saveDraft() {try{localStorage.setItem(STORAGE_KEY,JSON.stringify(settings()));$('draftStatus').textContent='文字と設定を自動保存しました。画像はデザイン保存で残せます。';}catch{$('draftStatus').textContent='自動保存できません。「デザイン保存」で残せます。';}}
 function switchMode(next) {mode=next;for(const kind of ['text','image']){const selected=kind===mode;$(kind+'Tab').setAttribute('aria-selected',String(selected));$(kind+'Tab').tabIndex=selected?0:-1;$(kind+'Panel').hidden=!selected;}render();}
 function syncUI() {
   const connected=!!transport?.connected;
   document.querySelectorAll('.editor input,.editor select,.editor textarea,.editor button').forEach(el=>{el.disabled=busy;});
+  const autoLength=$('autoLength').checked;
+  $('length').disabled=busy||autoLength;$('length').hidden=autoLength;$('autoLengthValue').hidden=!autoLength;
+  $('lengthLabel').htmlFor=autoLength?'autoLengthValue':'length';
   $('connectSerial').disabled=busy||connecting||probing||connected||!navigator.serial||!isSecureContext;
   $('connectBle').disabled=busy||connecting||probing||connected||!navigator.bluetooth||!isSecureContext;
   $('disconnect').hidden=!connected; $('disconnect').disabled=busy||probing||connecting;
@@ -96,9 +101,27 @@ function syncUI() {
   else $('connectionStatus').textContent='未接続';
   $('stop').hidden=!busy||Number($('copies').value)<=1;
 }
+function resolveLabelLength(s,ctx,contentMode,image) {
+  if(!s.autoLength)return {length:s.length,capped:false};
+  const inset=Math.max(s.frame?12:0,Math.round(s.margin*DOTS_PER_MM)), height=HEAD_DOTS-2*(s.frame?12:8);
+  let contentWidth=0;
+  if(contentMode==='text'){
+    const lines=s.labelText.replace(/\r/g,'').split('\n');
+    let size=s.fontSize*DOTS_PER_MM;
+    // Fit the tape height first, then choose the length without shrinking to the manual width.
+    if(s.autoFit)size=Math.min(size,height/(lines.length*1.18));
+    ctx.save();ctx.font=(s.bold?'700 ':'400 ')+size+'px '+FONTS[s.fontFamily];
+    contentWidth=Math.max(0,...lines.map(line=>ctx.measureText(line).width));ctx.restore();
+  }else if(image){contentWidth=image.width/image.height*height;}
+  const requiredDots=Math.ceil(contentWidth)+2*inset;
+  // Match the rounded canvas width so an extra millimetre is not added at pixel boundaries.
+  const length=Math.max(15,Math.ceil((requiredDots-.5)/DOTS_PER_MM));
+  return {length:Math.min(200,length),capped:length>200};
+}
 function render() {
   const s=settings(), canvas=$('preview'), ctx=canvas.getContext('2d',{willReadFrequently:true});
-  canvas.width=Math.round(s.length*DOTS_PER_MM); canvas.height=HEAD_DOTS;
+  const resolved=resolveLabelLength(s,ctx,mode,sourceImage);renderedLength=resolved.length;
+  canvas.width=Math.round(renderedLength*DOTS_PER_MM); canvas.height=HEAD_DOTS;
   ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
   const frameInset=5, verticalMargin=s.frame?12:8, margin=Math.min(Math.round(s.margin*DOTS_PER_MM),Math.floor(canvas.width/2)-12);
   const x=Math.max(s.frame?12:0,margin), y=verticalMargin, width=canvas.width-x*2, height=HEAD_DOTS-y*2;
@@ -132,7 +155,9 @@ function render() {
   ctx.putImageData(raster,0,0);
   if(!hasInk&&renderValid){renderValid=false;note='印刷する黒い部分がありません。画像の白黒の境界を調整してください。';}
   $('preview').setAttribute('aria-label',mode==='text'?'ラベルの印刷プレビュー: '+s.labelText:'選択した画像の白黒印刷プレビュー');
-  $('measurement').textContent=s.length+' mm × 12 mm';$('pixelInfo').textContent=canvas.width+' × 96 dots · 203 dpi';
+  if(resolved.capped)note='自動カット長の上限 200 mm に達しています。'+(note||'内容を枠内に縮小しています。');
+  $('autoLengthValue').value=renderedLength+' mm（自動）';
+  $('measurement').textContent=renderedLength+' mm × 12 mm'+(s.autoLength?' · 自動':'');$('pixelInfo').textContent=canvas.width+' × 96 dots · 203 dpi';
   $('thresholdValue').value=s.threshold;$('renderNote').textContent=note;$('renderNote').hidden=!note;
   syncUI();
 }
@@ -184,7 +209,7 @@ async function probe(){if(!transport?.connected||busy||probing||connecting)retur
 function progress(value){const n=Math.max(0,Math.min(100,Math.round(value)));$('progressBar').style.width=n+'%';$('progressTrack').setAttribute('aria-valuenow',String(n));}
 async function printLabels(){if(busy||probing||connecting||!transport?.connected)return;render();if(!renderValid||!hasInk)return;
   const copies=Math.round(bounded($('copies').value,1,20,1));$('copies').value=copies;
-  const tx=transport, {bytes,header}=buildRaster($('preview')), labelLength=settings().length;
+  const tx=transport, {bytes,header}=buildRaster($('preview')), labelLength=renderedLength;
   busy=true;stopAfterLabel=false;$('stop').disabled=false;clearMessage();syncUI();$('progressTrack').hidden=false;progress(0);let completed=0;
   try{for(let copy=0;copy<copies;copy++){
     $('printInfo').textContent=(copy+1)+' / '+copies+' 枚目 · プリンターを準備しています…';

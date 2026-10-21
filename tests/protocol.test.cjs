@@ -7,10 +7,22 @@ new vm.Script(script);
 const elements = new Map();
 const defaults = {labelText:'テスト',fontFamily:'sans',alignment:'center',fontSize:'5',length:'50',margin:'2',threshold:'160',copies:'2'};
 const document = {querySelectorAll(){return [];},getElementById(id){if(!elements.has(id))elements.set(id,{value:defaults[id]||'',checked:false,style:{},classList:{toggle(){}},setAttribute(){},textContent:'',hidden:false});return elements.get(id);}};
-const tests = `
+const tests = String.raw`
 (async()=>{
   let passed=0;
   const check=(name,fn)=>{fn();console.log('PASS '+name);passed++;};
+  const layoutSettings={labelText:'12345678',fontFamily:'sans',fontSize:4,bold:false,autoFit:true,autoLength:true,length:80,margin:2,frame:false};
+  const measuringContext={font:'',save(){},restore(){},measureText(line){return {width:line.length*parseFloat(this.font.split(' ')[1])};}};
+  const lengthOf=(overrides={},kind='text',image=null)=>resolveLabelLength({...layoutSettings,...overrides},measuringContext,kind,image);
+  check('manual length ignores content and preserves fixed setting',()=>assert.deepEqual(lengthOf({autoLength:false,length:80}),{length:80,capped:false}));
+  check('automatic length grows and shrinks with text, includes both margins',()=>{assert.equal(lengthOf().length,36);assert.equal(lengthOf({labelText:'12'}).length,15);assert.equal(lengthOf({labelText:'123456789012'}).length,52);assert.equal(lengthOf({margin:4}).length,40);});
+  check('automatic length fits height before measuring multiline text',()=>{assert.equal(lengthOf({labelText:'12345678\n12',fontSize:10}).length,38);assert.equal(lengthOf({labelText:'12345678\n12',fontSize:10,autoFit:false}).length,85);});
+  check('automatic length reserves room inside a frame',()=>{assert.equal(lengthOf({margin:0}).length,32);assert.equal(lengthOf({margin:0,frame:true}).length,35);});
+  check('empty automatic labels use minimum length',()=>assert.deepEqual(lengthOf({labelText:''}),{length:15,capped:false}));
+  check('automatic image length uses aspect ratio at available tape height',()=>{assert.equal(lengthOf({},'image',{width:200,height:100}).length,24);assert.equal(lengthOf({},'image',{width:100,height:200}).length,15);assert.equal(lengthOf({},'image',null).length,15);});
+  check('automatic length caps long text and wide images at 200 mm',()=>{assert.deepEqual(lengthOf({labelText:'A'.repeat(100)}),{length:200,capped:true});assert.deepEqual(lengthOf({},'image',{width:10000,height:1}),{length:200,capped:true});});
+  check('automatic mode keeps the manual length in saved settings',()=>{elements.set('autoLength',{checked:true});assert.equal(settings().autoLength,true);assert.equal(settings().length,50);syncUI();assert.equal(elements.get('length').disabled,true);assert.equal(elements.get('length').hidden,true);assert.equal(elements.get('autoLengthValue').hidden,false);});
+  check('legacy designs restore fixed length mode',()=>{restoreSettings({});assert.equal(settings().autoLength,false);syncUI();assert.equal(elements.get('length').disabled,false);assert.equal(elements.get('length').hidden,false);});
   function bitmap(w,points=[]){const p=new Uint8ClampedArray(w*96*4).fill(255);for(const [x,y] of points)p[(y*w+x)*4]=0;return {width:w,height:96,getContext:()=>({getImageData:()=>({data:p})})};}
   check('P12 clockwise rotation and MSB-first packing',()=>{const r=buildRaster(bitmap(3,[[0,0],[1,95],[2,87]]));const expected=new Uint8Array(36);expected[11]=1;expected[12]=128;expected[25]=128;assert.deepEqual(r.bytes,expected);assert.deepEqual([...r.header],[27,64,29,118,48,0,12,0,3,0]);});
   check('blank raster remains blank',()=>assert.equal(buildRaster(bitmap(17)).bytes.some(Boolean),false));
@@ -29,6 +41,7 @@ const tests = `
   render=()=>{};const realTimer=setTimeout;setTimeout=(fn,ms)=>realTimer(fn,Math.min(ms,1));hasInk=true;renderValid=true;
   function fakeTransport(){return {name:'Test printer',connected:true,chunkSize:128,chunkDelay:0,queries:[],writes:[],closed:false,async query(data){this.queries.push([...data]);return new Uint8Array([1]);},async send(data){this.writes.push([...data]);},async close(){this.closed=true;this.connected=false;}};}
   transport=fakeTransport();let tx=transport;await printLabels();assert.equal(tx.queries.length,12);assert.deepEqual(tx.queries.slice(0,6),expectedInit);assert.deepEqual(tx.writes[0],[27,64,29,118,48,0,12,0,144,1]);assert.equal(tx.writes.filter(w=>w.length===3&&w[0]===27&&w[1]===100).length,4);assert.equal(tx.writes.slice(1,39).flat().length,4800);assert.equal(busy,false);console.log('PASS two labels: initialization, 96-dot raster, two feeds each');passed++;
+  renderedLength=24;elements.set('preview',bitmap(192,[[0,0],[191,95]]));$('copies').value='1';$('autoLength').checked=true;transport=fakeTransport();tx=transport;await printLabels();assert.deepEqual(tx.writes[0].slice(-2),[192,0]);assert.equal(tx.writes.slice(1,-2).flat().length,2304);assert.equal(logLines.some(line=>line.includes('送信: 24 mm, 2304 bytes')),true);assert.equal($('length').value,'50');assert.equal($('length').disabled,true);renderedLength=50;elements.set('preview',canvas);$('copies').value='2';$('autoLength').checked=false;console.log('PASS automatic length is used in raster and print log, manual setting retained');passed++;
   transport=fakeTransport();tx=transport;tx.send=async function(data){this.writes.push([...data]);stopAfterLabel=true;};await printLabels();assert.equal(tx.queries.length,6);assert.equal(tx.writes.filter(w=>w.length===3&&w[1]===100).length,2);console.log('PASS stop finishes current label and skips remaining copies');passed++;
   transport=fakeTransport();tx=transport;tx.send=async function(data){this.writes.push([...data]);if(this.writes.length===3)throw new Error('disconnected');};await printLabels();assert.equal(transport,null);assert.equal(tx.closed,true);assert.equal(tx.queries.length,6);assert.equal(tx.writes.length,3);assert.equal(tx.writes.some(w=>w.length===3&&w[1]===100),false);assert.equal(busy,false);console.log('PASS mid-raster failure disconnects, never feeds or retries');passed++;
   transport=fakeTransport();tx=transport;hasInk=false;await printLabels();assert.equal(tx.writes.length,0);console.log('PASS blank label cannot be sent');passed++;

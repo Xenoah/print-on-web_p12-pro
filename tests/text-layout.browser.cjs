@@ -19,7 +19,7 @@ const htmlPath=path.join(__dirname,'..','index.html');
       const original=CanvasRenderingContext2D.prototype.fillText;
       CanvasRenderingContext2D.prototype.fillText=function(text,x,y,...rest){
         if(this.canvas.id==='preview'){
-          const m=this.getTransform();window.drawnGlyphs.push({text,x:m.a*x+m.c*y+m.e,y:m.b*x+m.d*y+m.f,a:m.a,b:m.b,c:m.c,d:m.d});
+          const m=this.getTransform();window.drawnGlyphs.push({text,x:m.a*x+m.c*y+m.e,y:m.b*x+m.d*y+m.f,a:m.a,b:m.b,c:m.c,d:m.d,font:this.font});
         }
         return original.call(this,text,x,y,...rest);
       };
@@ -38,12 +38,15 @@ const htmlPath=path.join(__dirname,'..','index.html');
     const defaults={labelText:'日月',writingMode:'horizontal',alignment:'center',fontFamily:'sans',fontSize:2.5,bold:true,autoFit:true,autoLength:false,length:50,margin:2,frame:false,invert:false,flip:false};
     await apply(defaults);const horizontal=await snapshot();
     await page.locator('#writingMode').selectOption('vertical');
-    await page.waitForFunction(()=>document.getElementById('textDirectionHelp').textContent.includes('上から下'));
-    const vertical=await snapshot();assert.notEqual(vertical.png,horizontal.png);assert.equal(vertical.height,96);assert.equal(vertical.width,400);
+    await page.waitForFunction(()=>document.getElementById('textDirectionHelp').textContent.includes('90°'));
+    const vertical=await snapshot();assert.notEqual(vertical.png,horizontal.png);assert.equal(vertical.height,96);
+    assert.equal(await page.locator('#autoLength').isChecked(),true);
+    await page.locator('#autoLength').uncheck();
+    await page.waitForFunction(()=>document.getElementById('preview').width===400);
     await page.locator('#writingMode').selectOption('horizontal');
     await page.waitForFunction(()=>document.getElementById('textDirectionHelp').textContent==='改行で複数行にできます。');
     assert.equal((await snapshot()).png,horizontal.png);
-    check('UI direction switching updates the canvas and restores horizontal rendering exactly');
+    check('vertical selection enables automatic length; manual mode and horizontal rendering remain available');
 
     for(const writingMode of ['horizontal','vertical']){
       const results=[];
@@ -58,22 +61,51 @@ const htmlPath=path.join(__dirname,'..','index.html');
     }
     await apply({...defaults,writingMode:'vertical',labelText:'日月\n山川'});
     const columns=await snapshot();const [a,b,c,d]=columns.glyphs;
-    assert.deepEqual(columns.glyphs.map(g=>g.text),['日','月','山','川']);assert.equal(a.x,b.x);assert.equal(c.x,d.x);assert.ok(a.x>c.x);assert.ok(a.y<b.y&&c.y<d.y);
-    assert.ok(columns.glyphs.every(g=>g.a===1&&g.b===0&&g.c===0&&g.d===1));
-    check('vertical characters stay upright, flow downwards, and new columns move right to left');
+    assert.deepEqual(columns.glyphs.map(g=>g.text),['日','月','山','川']);assert.equal(a.y,b.y);assert.equal(c.y,d.y);assert.ok(a.x<b.x&&c.x<d.x);assert.ok(a.y<c.y);
+    assert.ok(columns.glyphs.every(g=>Math.abs(g.a)<1e-12&&Math.abs(g.b+1)<1e-12&&Math.abs(g.c-1)<1e-12&&Math.abs(g.d)<1e-12));
+    // Turn the landscape tape clockwise to its reading orientation: characters
+    // must then go down and successive columns must go left, as in vertical-rl.
+    const upright=columns.glyphs.map(g=>({x:96-g.y,y:g.x}));
+    assert.equal(upright[0].x,upright[1].x);assert.ok(upright[0].y<upright[1].y);assert.ok(upright[0].x>upright[2].x);
+    check('glyphs rotate left 90 degrees and advance right; turning the tape yields Japanese vertical-rl');
+
+    for(const alignment of ['left','center','right']){
+      await apply({...defaults,writingMode:'vertical',labelText:'日日日日\n日日',alignment});
+      const g=(await snapshot()).glyphs;
+      if(alignment==='left')assert.ok(Math.abs(g[0].x-g[4].x)<1e-9);
+      else if(alignment==='right')assert.ok(Math.abs(g[3].x-g[5].x)<1e-9);
+      else assert.ok(Math.abs((g[0].x+g[3].x)/2-(g[4].x+g[5].x)/2)<1e-9);
+    }
+    check('unequal input lines align independently at their left edge, center, or right edge');
 
     await apply({...defaults,writingMode:'vertical',labelText:'ー',fontSize:5});const longMark=await snapshot();
-    assert.ok(longMark.maxY-longMark.minY>3*(longMark.maxX-longMark.minX));
+    assert.ok(longMark.maxX-longMark.minX>3*(longMark.maxY-longMark.minY));
     await apply({...defaults,writingMode:'vertical',labelText:'か\u3099👨‍👩‍👧‍👦'});
     assert.deepEqual((await snapshot()).glyphs.map(g=>g.text),['か\u3099','👨‍👩‍👧‍👦']);
-    check('long-vowel mark turns vertical; combining characters and emoji are not split into cells');
+    check('long-vowel mark follows the tape axis; combining characters and emoji stay in one cell');
 
-    await apply({...defaults,writingMode:'vertical',autoLength:true,fontSize:5,labelText:'日月\n山川\n天地\n左右'});const short=await snapshot();
-    await apply({writingMode:'vertical',autoLength:true,labelText:'日月\n山川\n天地\n左右\n東西\n南北'});const longer=await snapshot();
+    await apply({...defaults,writingMode:'horizontal',fontSize:5,labelText:'日日日日'});
+    await page.locator('#writingMode').selectOption('vertical');
+    await page.waitForFunction(()=>document.getElementById('measurement').textContent.startsWith('24 mm'));
+    const short=await snapshot();
+    await page.evaluate(()=>{window.drawnGlyphs=[];});
+    await page.locator('#labelText').fill('日日日日日日日日');
+    await page.waitForFunction(()=>document.getElementById('measurement').textContent.startsWith('44 mm'));
+    const longer=await snapshot();
     assert.ok(longer.width>short.width);assert.equal(longer.height,96);assert.ok(longer.valid&&short.valid);
+    assert.ok(longer.glyphs.every(g=>g.font===short.glyphs.at(-1).font));
+    await page.locator('#labelText').fill('日日日日');
+    await page.waitForFunction(()=>document.getElementById('measurement').textContent.startsWith('24 mm'));
+    assert.equal((await snapshot()).width,short.width);
     await apply({...defaults,writingMode:'vertical',labelText:'文字が縦に並ぶ',fontSize:10,autoFit:false});assert.equal((await snapshot()).valid,false);
     await apply({writingMode:'vertical',autoFit:true});assert.equal((await snapshot()).valid,true);
-    check('automatic length uses column width; overflow is rejected or fitted to the 96-dot tape');
+    check('typing grows/shrinks tape length without reducing font size; manual overflow remains guarded');
+
+    await apply({...defaults,writingMode:'vertical',autoLength:true,fontSize:10,labelText:'日'.repeat(600)});
+    const capped=await snapshot();assert.equal(capped.width,15984);assert.equal(capped.height,96);assert.equal(capped.valid,true);
+    assert.match(await page.locator('#renderNote').textContent(),/2000 mm/);
+    await apply({writingMode:'vertical',autoLength:true,autoFit:false});assert.equal((await snapshot()).valid,false);
+    check('vertical labels cap at 2000 mm; content is fitted or rejected instead of silently clipped');
 
     await apply({...defaults,writingMode:'vertical',labelText:'日月\n山川'});const unflipped=await page.evaluate(()=>[...document.getElementById('preview').getContext('2d').getImageData(0,0,400,96).data]);
     await apply({writingMode:'vertical',flip:true});const flipped=await page.evaluate(()=>[...document.getElementById('preview').getContext('2d').getImageData(0,0,400,96).data]);

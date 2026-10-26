@@ -86,7 +86,7 @@ function saveDraft() {try{localStorage.setItem(STORAGE_KEY,JSON.stringify(settin
 function switchMode(next) {mode=next;for(const kind of ['text','image']){const selected=kind===mode;$(kind+'Tab').setAttribute('aria-selected',String(selected));$(kind+'Tab').tabIndex=selected?0:-1;$(kind+'Panel').hidden=!selected;}render();}
 function syncUI() {
   const connected=!!transport?.connected;
-  $('textDirectionHelp').textContent=$('writingMode').value==='vertical'?'上から下へ、改行で左隣の列へ並びます。左右・中央寄せで列全体を配置します。':'改行で複数行にできます。';
+  $('textDirectionHelp').textContent=$('writingMode').value==='vertical'?'文字を左へ90°回して右へ並べます。改行は下の段へ。自動カット長で文字数に合わせて長さが変わります。':'改行で複数行にできます。';
   document.querySelectorAll('.editor input,.editor select,.editor textarea,.editor button').forEach(el=>{el.disabled=busy;});
   const autoLength=$('autoLength').checked;
   $('length').disabled=busy||autoLength;$('length').hidden=autoLength;$('autoLengthValue').hidden=!autoLength;
@@ -105,17 +105,19 @@ function syncUI() {
 }
 const graphemeSegmenter=typeof Intl.Segmenter==='function'?new Intl.Segmenter('ja',{granularity:'grapheme'}):null;
 function verticalTextLayout(s,width,height) {
-  // A grapheme occupies one upright cell; combining marks/emoji stay together.
-  const columns=s.labelText.replace(/\r/g,'').split('\n').map(line=>graphemeSegmenter?[...graphemeSegmenter.segment(line)].map(part=>part.segment):Array.from(line.normalize('NFC')));
-  const rows=Math.max(1,...columns.map(column=>column.length)),originalSize=s.fontSize*DOTS_PER_MM;
-  const widthInCells=1+(columns.length-1)*1.18;
-  const size=s.autoFit?Math.min(originalSize,width/widthInCells,height/rows):originalSize;
-  return {columns,size,originalSize,width:widthInCells*size,height:rows*size};
+  // Japanese vertical-rl, rotated 90 degrees counter-clockwise onto the tape:
+  // characters advance rightward; subsequent input lines advance downward.
+  // Keep graphemes intact so combining marks/emoji occupy one cell each.
+  const lines=s.labelText.replace(/\r/g,'').split('\n').map(line=>graphemeSegmenter?[...graphemeSegmenter.segment(line)].map(part=>part.segment):Array.from(line.normalize('NFC')));
+  const cells=Math.max(1,...lines.map(line=>line.length)),originalSize=s.fontSize*DOTS_PER_MM;
+  const heightInCells=1+(lines.length-1)*1.18;
+  const size=s.autoFit?Math.min(originalSize,width/cells,height/heightInCells):originalSize;
+  return {lines,size,originalSize,width:cells*size,height:heightInCells*size};
 }
 function drawVerticalGlyph(ctx,glyph,x,y,size) {
-  ctx.save();ctx.translate(x,y);ctx.textAlign='center';ctx.textBaseline='alphabetic';
-  // Canvas has no vertical shaping. Rotate common brackets and the prolonged
-  // sound mark; place Japanese commas/stops at the upper right of their cell.
+  ctx.save();ctx.translate(x,y);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.textBaseline='alphabetic';
+  // Apply Japanese vertical punctuation inside the rotated cell: brackets and
+  // the sound mark turn back, while commas/stops move to the reading-frame top right.
   if('ー－―—…‥「」『』（）()［］[]｛｝{}〈〉《》【】〔〕〜～'.includes(glyph))ctx.rotate(Math.PI/2);
   if('、。，．'.includes(glyph))ctx.translate(size*.25,-size*.25);
   else if('ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ'.includes(glyph))ctx.translate(size*.1,-size*.1);
@@ -157,11 +159,14 @@ function render() {
     const layout=verticalTextLayout(s,width,height);
     if(layout.width>width+.5||layout.height>height+.5){note='文字がラベルからはみ出しています。文字サイズを下げるか、自動縮小を有効にしてください。';renderValid=false;}
     else if(layout.size<layout.originalSize-.2)note='枠内に収まるよう、文字を '+(layout.size/DOTS_PER_MM).toFixed(1)+' mm に縮小しています。';
-    if(layout.size<8&&s.labelText.trim()){note='文字が小さすぎます。1列の文字数を減らして、改行で列を分けてください。';renderValid=false;}
-    const left=s.alignment==='left'?x:s.alignment==='right'?x+width-layout.width:x+(width-layout.width)/2;
+    if(layout.size<8&&s.labelText.trim()){note='文字が小さすぎます。行数を減らすか、自動カット長を有効にしてラベルを長くしてください。';renderValid=false;}
     const top=y+(height-layout.height)/2;
     ctx.font=(s.bold?'700 ':'400 ')+layout.size+'px '+FONTS[s.fontFamily];
-    layout.columns.forEach((column,i)=>column.forEach((glyph,j)=>drawVerticalGlyph(ctx,glyph,left+layout.width-layout.size/2-i*layout.size*1.18,top+(j+.5)*layout.size,layout.size)));
+    layout.lines.forEach((line,i)=>{
+      const lineWidth=line.length*layout.size;
+      const left=s.alignment==='left'?x:s.alignment==='right'?x+width-lineWidth:x+(width-lineWidth)/2;
+      line.forEach((glyph,j)=>drawVerticalGlyph(ctx,glyph,left+(j+.5)*layout.size,top+layout.size/2+i*layout.size*1.18,layout.size));
+    });
     if(!s.labelText.trim()){renderValid=false;note='印刷したい文字を入力してください。';}
   } else if(mode==='text') {
     const lines=s.labelText.replace(/\r/g,'').split('\n');
@@ -293,7 +298,7 @@ function download(blob,filename){const url=URL.createObjectURL(blob);const a=doc
 function loadImage(url){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>img.width*img.height>40000000?reject(new Error('画像の解像度が大きすぎます。4000万画素以下に縮小してください。')):resolve(img);img.onerror=()=>reject(new Error('画像を読み込めませんでした。PNG または JPEG をお試しください。'));img.src=url;});}
 async function selectImage(file){if(!file)return;const revision=++imageRevision;try{if(file.size>8*1024*1024)throw new Error('画像は 8 MB 以下にしてください。');if(!/^image\/(png|jpeg|webp|bmp)$/.test(file.type))throw new Error('PNG・JPEG・WebP・BMP の画像を選んでください。');const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('ファイルを読み込めません。'));reader.readAsDataURL(file);});const img=await loadImage(data);if(revision!==imageRevision)return;sourceImage=img;imageDataUrl=data;imageFilename=file.name;$('imageName').textContent=file.name;switchMode('image');clearMessage();}catch(error){message(error.message,'error');}}
 async function importDesign(file){if(!file)return;const revision=++imageRevision;try{if(file.size>12*1024*1024)throw new Error('デザインファイルは 12 MB 以下にしてください。');const doc=JSON.parse(await file.text());if(doc.format!=='p12-studio'||doc.version!==1||!doc.settings||typeof doc.settings!=='object')throw new Error('P12 Studio のデザインファイルではありません。');let img=null,url=null;if(doc.image){if(typeof doc.image!=='string'||!/^data:image\/(png|jpeg|webp|bmp);base64,[A-Za-z0-9+/=]+$/.test(doc.image))throw new Error('保存された画像形式が不正です。');url=doc.image;img=await loadImage(url);}if(revision!==imageRevision)return;restoreSettings(doc.settings);sourceImage=img;imageDataUrl=url;imageFilename=typeof doc.imageName==='string'?doc.imageName.slice(0,200):'保存した画像';$('imageName').textContent=img?imageFilename:'PNG・JPEG・WebP・BMP / 8 MB まで';switchMode(doc.mode==='image'?'image':'text');saveDraft();message('デザインを読み込みました。');}catch(error){message('読み込みできませんでした: '+error.message,'error');}finally{$('designFile').value='';}}
-for(const id of SETTING_IDS)$(id).addEventListener('input',()=>{clearTimeout(renderTimer);renderTimer=setTimeout(()=>{render();saveDraft();},70);});
+for(const id of SETTING_IDS)$(id).addEventListener('input',()=>{if(id==='writingMode'&&$('writingMode').value==='vertical')$('autoLength').checked=true;clearTimeout(renderTimer);renderTimer=setTimeout(()=>{render();saveDraft();},70);});
 $('textTab').addEventListener('click',()=>switchMode('text'));$('imageTab').addEventListener('click',()=>switchMode('image'));
 for(const kind of ['text','image'])$(kind+'Tab').addEventListener('keydown',event=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();const next=event.key==='Home'?'text':event.key==='End'?'image':kind==='text'?'image':'text';switchMode(next);$(next+'Tab').focus();}});
 $('connectSerial').addEventListener('click',()=>connect('serial'));$('connectBle').addEventListener('click',()=>connect('ble'));$('disconnect').addEventListener('click',disconnect);$('probe').addEventListener('click',probe);$('print').addEventListener('click',printLabels);

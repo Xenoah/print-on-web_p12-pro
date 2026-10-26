@@ -4,14 +4,14 @@
 
 コンパイル・インストール・サーバー・外部ライブラリ不要。`index.html` ひとつで使える、日本語対応のラベル作成ツールです。
 
-[ブラウザで使う](https://xenoah.github.io/print-on-web_p12-pro/) · [最新版をダウンロード](https://github.com/Xenoah/print-on-web_p12-pro/releases/latest) · [HTML を直接ダウンロード](https://github.com/Xenoah/print-on-web_p12-pro/releases/latest/download/index.html)
+[ブラウザで使う](https://xenoah.github.io/print-on-web_p12-pro/) · [最新版をダウンロード](https://github.com/Xenoah/print-on-web_p12-pro/releases/latest) · [HTML 単体](https://raw.githubusercontent.com/Xenoah/print-on-web_p12-pro/main/index.html)
 
 ![P12 Studio — Chrome から P12 Pro へテストラベルを送信した画面](docs/images/p12-studio.png)
 
 ## 使い方
 
-1. [Releases](https://github.com/Xenoah/print-on-web_p12-pro/releases/latest) の **Assets → `index.html`** を保存します。
-2. デスクトップ版 **Chrome または Edge** で、その HTML ファイルを開きます。
+1. [Releases](https://github.com/Xenoah/print-on-web_p12-pro/releases/latest) の **Source code (zip)** を保存して展開します。HTML だけ取得する場合は、リリース本文の HTML リンクをファイルとして保存してください。
+2. デスクトップ版 **Chrome または Edge** で、`index.html` を開きます。
 3. P12 Pro の電源を入れ、Windows の Bluetooth 設定でペアリングします。
 4. **Bluetooth 接続** を押し、`P12Pro` またはプリンターの送信 COM ポートを選びます。`JL_SPP（COM番号）` と表示される場合があります。
 5. 文字・画像・ラベルの長さを設定し、プレビューを確認して **印刷する** を押します。

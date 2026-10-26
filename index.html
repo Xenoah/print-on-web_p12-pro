@@ -31,7 +31,8 @@ footer{border-top:1px solid var(--line);padding-top:20px;margin-top:27px;display
 <div class="section-top"><h2 id="editor-title"><span class="step mono">01</span>ラベルをつくる</h2><span class="eyebrow">EDITOR</span></div>
 <div class="tabs" role="tablist" aria-label="内容の種類"><button type="button" role="tab" id="textTab" aria-selected="true" aria-controls="textPanel" tabindex="0">テキスト</button><button type="button" role="tab" id="imageTab" aria-selected="false" aria-controls="imagePanel" tabindex="-1">画像</button></div>
 <div id="textPanel" role="tabpanel" aria-labelledby="textTab">
-<div class="field"><label for="labelText">ラベルの文字</label><textarea id="labelText" maxlength="1200" spellcheck="false" placeholder="ラベルにしたい文字を入力">ケーブル・充電器</textarea><div class="hint">改行で複数行にできます。</div></div>
+<div class="field"><label for="labelText">ラベルの文字</label><textarea id="labelText" maxlength="1200" spellcheck="false" placeholder="ラベルにしたい文字を入力">ケーブル・充電器</textarea><div id="textDirectionHelp" class="hint">改行で複数行にできます。</div></div>
+<div class="field"><label for="writingMode">書字方向</label><select id="writingMode" aria-describedby="textDirectionHelp"><option value="horizontal">横書き</option><option value="vertical">縦書き</option></select></div>
 <div class="row"><div class="field"><label for="fontFamily">書体</label><select id="fontFamily"><option value="sans">ゴシック</option><option value="serif">明朝</option><option value="mono">等幅</option></select></div><div class="field"><label for="alignment">文字の配置</label><select id="alignment"><option value="center">中央</option><option value="left">左寄せ</option><option value="right">右寄せ</option></select></div></div>
 <div class="field"><label for="fontSize">文字サイズ <span class="unit">mm</span></label><input id="fontSize" type="number" min="1" max="10" step="0.5" value="5"><div class="checks"><label class="check"><input id="bold" type="checkbox" checked>太字</label><label class="check"><input id="autoFit" type="checkbox" checked>はみ出すとき縮小</label></div></div>
 </div>
@@ -67,7 +68,7 @@ const STORAGE_KEY = 'p12-studio-v1';
 const FONTS = {sans:'"Yu Gothic","Meiryo",sans-serif',serif:'"Yu Mincho","MS Mincho",serif',mono:'"MS Gothic",Consolas,monospace'};
 const INIT = [[0x1f,0x11,0x38],[0x1f,0x11,0x11,0x1f,0x11,0x12,0x1f,0x11,0x09,0x1f,0x11,0x13],[0x1f,0x11,0x09],[0x1f,0x11,0x19,0x1f,0x11,0x11],[0x1f,0x11,0x19],[0x1f,0x11,0x07]];
 const FEED = new Uint8Array([0x1b,0x64,0x0d]);
-const SETTING_IDS = ['labelText','fontFamily','alignment','fontSize','bold','autoFit','autoLength','length','margin','frame','invert','flip','threshold'];
+const SETTING_IDS = ['labelText','fontFamily','alignment','writingMode','fontSize','bold','autoFit','autoLength','length','margin','frame','invert','flip','threshold'];
 const logLines = [];
 let mode = 'text', sourceImage = null, imageDataUrl = null, imageFilename = '', imageRevision = 0;
 let transport = null, busy = false, connecting = false, probing = false, stopAfterLabel = false, renderValid = true, hasInk = false;
@@ -79,12 +80,13 @@ function message(text, type='info') { $('message').textContent=text; $('message'
 function clearMessage() { $('message').hidden=true; }
 function hex(bytes) { return Array.from(bytes, b=>b.toString(16).padStart(2,'0')).join(' '); }
 async function timeout(promise, ms, text) { let timer; try {return await Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(text)),ms);})]);} finally {clearTimeout(timer);} }
-function settings() {return {labelText:$('labelText').value,fontFamily:$('fontFamily').value,alignment:$('alignment').value,fontSize:bounded($('fontSize').value,1,10,5),bold:$('bold').checked,autoFit:$('autoFit').checked,autoLength:$('autoLength').checked,length:Math.round(bounded($('length').value,15,MAX_LENGTH_MM,50)),margin:bounded($('margin').value,0,10,2),frame:$('frame').checked,invert:$('invert').checked,flip:$('flip').checked,threshold:bounded($('threshold').value,20,235,160)};}
-function restoreSettings(data) {$('autoLength').checked=data.autoLength===true;for(const id of SETTING_IDS){if(!(id in data))continue;const el=$(id);if(el.type==='checkbox'){if(typeof data[id]==='boolean')el.checked=data[id];}else if(el.tagName==='SELECT'){if([...el.options].some(o=>o.value===data[id]))el.value=data[id];}else if(el.type==='number'||el.type==='range'){el.value=bounded(data[id],Number(el.min),Number(el.max),Number(el.defaultValue));}else if(typeof data[id]==='string'){el.value=data[id].slice(0,1200);}}}
+function settings() {return {labelText:$('labelText').value,fontFamily:$('fontFamily').value,alignment:$('alignment').value,writingMode:$('writingMode').value==='vertical'?'vertical':'horizontal',fontSize:bounded($('fontSize').value,1,10,5),bold:$('bold').checked,autoFit:$('autoFit').checked,autoLength:$('autoLength').checked,length:Math.round(bounded($('length').value,15,MAX_LENGTH_MM,50)),margin:bounded($('margin').value,0,10,2),frame:$('frame').checked,invert:$('invert').checked,flip:$('flip').checked,threshold:bounded($('threshold').value,20,235,160)};}
+function restoreSettings(data) {$('autoLength').checked=data.autoLength===true;$('writingMode').value=data.writingMode==='vertical'?'vertical':'horizontal';for(const id of SETTING_IDS){if(!(id in data))continue;const el=$(id);if(el.type==='checkbox'){if(typeof data[id]==='boolean')el.checked=data[id];}else if(el.tagName==='SELECT'){if([...el.options].some(o=>o.value===data[id]))el.value=data[id];}else if(el.type==='number'||el.type==='range'){el.value=bounded(data[id],Number(el.min),Number(el.max),Number(el.defaultValue));}else if(typeof data[id]==='string'){el.value=data[id].slice(0,1200);}}}
 function saveDraft() {try{localStorage.setItem(STORAGE_KEY,JSON.stringify(settings()));$('draftStatus').textContent='文字と設定を自動保存しました。画像はデザイン保存で残せます。';}catch{$('draftStatus').textContent='自動保存できません。「デザイン保存」で残せます。';}}
 function switchMode(next) {mode=next;for(const kind of ['text','image']){const selected=kind===mode;$(kind+'Tab').setAttribute('aria-selected',String(selected));$(kind+'Tab').tabIndex=selected?0:-1;$(kind+'Panel').hidden=!selected;}render();}
 function syncUI() {
   const connected=!!transport?.connected;
+  $('textDirectionHelp').textContent=$('writingMode').value==='vertical'?'上から下へ、改行で左隣の列へ並びます。左右・中央寄せで列全体を配置します。':'改行で複数行にできます。';
   document.querySelectorAll('.editor input,.editor select,.editor textarea,.editor button').forEach(el=>{el.disabled=busy;});
   const autoLength=$('autoLength').checked;
   $('length').disabled=busy||autoLength;$('length').hidden=autoLength;$('autoLengthValue').hidden=!autoLength;
@@ -101,17 +103,39 @@ function syncUI() {
   else $('connectionStatus').textContent='未接続';
   $('stop').hidden=!busy||Number($('copies').value)<=1;
 }
+const graphemeSegmenter=typeof Intl.Segmenter==='function'?new Intl.Segmenter('ja',{granularity:'grapheme'}):null;
+function verticalTextLayout(s,width,height) {
+  // A grapheme occupies one upright cell; combining marks/emoji stay together.
+  const columns=s.labelText.replace(/\r/g,'').split('\n').map(line=>graphemeSegmenter?[...graphemeSegmenter.segment(line)].map(part=>part.segment):Array.from(line.normalize('NFC')));
+  const rows=Math.max(1,...columns.map(column=>column.length)),originalSize=s.fontSize*DOTS_PER_MM;
+  const widthInCells=1+(columns.length-1)*1.18;
+  const size=s.autoFit?Math.min(originalSize,width/widthInCells,height/rows):originalSize;
+  return {columns,size,originalSize,width:widthInCells*size,height:rows*size};
+}
+function drawVerticalGlyph(ctx,glyph,x,y,size) {
+  ctx.save();ctx.translate(x,y);ctx.textAlign='center';ctx.textBaseline='alphabetic';
+  // Canvas has no vertical shaping. Rotate common brackets and the prolonged
+  // sound mark; place Japanese commas/stops at the upper right of their cell.
+  if('ー－―—…‥「」『』（）()［］[]｛｝{}〈〉《》【】〔〕〜～'.includes(glyph))ctx.rotate(Math.PI/2);
+  if('、。，．'.includes(glyph))ctx.translate(size*.25,-size*.25);
+  else if('ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ'.includes(glyph))ctx.translate(size*.1,-size*.1);
+  const metrics=ctx.measureText(glyph),ascent=metrics.actualBoundingBoxAscent??size*.8,descent=metrics.actualBoundingBoxDescent??size*.2;
+  ctx.fillText(glyph,0,(ascent-descent)/2);ctx.restore();
+}
 function resolveLabelLength(s,ctx,contentMode,image) {
   if(!s.autoLength)return {length:s.length,capped:false};
   const inset=Math.max(s.frame?12:0,Math.round(s.margin*DOTS_PER_MM)), height=HEAD_DOTS-2*(s.frame?12:8);
   let contentWidth=0;
   if(contentMode==='text'){
-    const lines=s.labelText.replace(/\r/g,'').split('\n');
-    let size=s.fontSize*DOTS_PER_MM;
-    // Fit the tape height first, then choose the length without shrinking to the manual width.
-    if(s.autoFit)size=Math.min(size,height/(lines.length*1.18));
-    ctx.save();ctx.font=(s.bold?'700 ':'400 ')+size+'px '+FONTS[s.fontFamily];
-    contentWidth=Math.max(0,...lines.map(line=>ctx.measureText(line).width));ctx.restore();
+    if(s.writingMode==='vertical')contentWidth=s.labelText.trim()?verticalTextLayout(s,Infinity,height).width:0;
+    else{
+      const lines=s.labelText.replace(/\r/g,'').split('\n');
+      let size=s.fontSize*DOTS_PER_MM;
+      // Fit the tape height first, then choose the length without shrinking to the manual width.
+      if(s.autoFit)size=Math.min(size,height/(lines.length*1.18));
+      ctx.save();ctx.font=(s.bold?'700 ':'400 ')+size+'px '+FONTS[s.fontFamily];
+      contentWidth=Math.max(0,...lines.map(line=>ctx.measureText(line).width));ctx.restore();
+    }
   }else if(image){contentWidth=image.width/image.height*height;}
   const requiredDots=Math.ceil(contentWidth)+2*inset;
   // Match the rounded canvas width so an extra millimetre is not added at pixel boundaries.
@@ -129,7 +153,17 @@ function render() {
   ctx.fillStyle='#000';ctx.strokeStyle='#000';
   if(s.frame){ctx.lineWidth=2;ctx.strokeRect(frameInset,frameInset,canvas.width-2*frameInset,HEAD_DOTS-2*frameInset);}
   ctx.save();ctx.beginPath();ctx.rect(x,y,width,height);ctx.clip();
-  if(mode==='text') {
+  if(mode==='text'&&s.writingMode==='vertical') {
+    const layout=verticalTextLayout(s,width,height);
+    if(layout.width>width+.5||layout.height>height+.5){note='文字がラベルからはみ出しています。文字サイズを下げるか、自動縮小を有効にしてください。';renderValid=false;}
+    else if(layout.size<layout.originalSize-.2)note='枠内に収まるよう、文字を '+(layout.size/DOTS_PER_MM).toFixed(1)+' mm に縮小しています。';
+    if(layout.size<8&&s.labelText.trim()){note='文字が小さすぎます。1列の文字数を減らして、改行で列を分けてください。';renderValid=false;}
+    const left=s.alignment==='left'?x:s.alignment==='right'?x+width-layout.width:x+(width-layout.width)/2;
+    const top=y+(height-layout.height)/2;
+    ctx.font=(s.bold?'700 ':'400 ')+layout.size+'px '+FONTS[s.fontFamily];
+    layout.columns.forEach((column,i)=>column.forEach((glyph,j)=>drawVerticalGlyph(ctx,glyph,left+layout.width-layout.size/2-i*layout.size*1.18,top+(j+.5)*layout.size,layout.size)));
+    if(!s.labelText.trim()){renderValid=false;note='印刷したい文字を入力してください。';}
+  } else if(mode==='text') {
     const lines=s.labelText.replace(/\r/g,'').split('\n');
     let size=s.fontSize*DOTS_PER_MM;
     const setFont=()=>{ctx.font=(s.bold?'700 ':'400 ')+size+'px '+FONTS[s.fontFamily];};setFont();
@@ -188,9 +222,35 @@ class SerialTransport extends ResponseChannel {
 }
 const BLE_SERVICES=[0xff00,0xffe0,0xae30,'49535343-fe7d-4ae5-8fa9-9fafd205e455'];
 class BleTransport extends ResponseChannel {
-  constructor(device){super();this.device=device;this.name=(device.name||'P12')+' / BLE';this.chunkSize=20;this.chunkDelay=20;this.onLost=()=>this.lost('BLE 接続が切れました。');this.onNotify=event=>this.receive(new Uint8Array(event.target.value.buffer,event.target.value.byteOffset,event.target.value.byteLength));}
+  constructor(device){super();this.device=device;this.name=(device.name||'P12')+' / BLE';this.chunkSize=120;this.chunkDelay=20;this.onLost=()=>this.lost('BLE 接続が切れました。');this.onNotify=event=>this.receive(new Uint8Array(event.target.value.buffer,event.target.value.byteOffset,event.target.value.byteLength));}
   async open(){this.device.addEventListener('gattserverdisconnected',this.onLost);const server=await this.device.gatt.connect();if(this.closing){server.disconnect();throw new Error('接続を中止しました。');}let found=null;for(const serviceId of BLE_SERVICES){try{const service=await server.getPrimaryService(serviceId);const chars=await service.getCharacteristics();const writable=chars.filter(c=>c.properties.write||c.properties.writeWithoutResponse);const write=writable.find(c=>c.uuid.startsWith('0000ff02'))||writable[0];if(write){found={write,notify:chars.find(c=>c.uuid.startsWith('0000ff03')&&(c.properties.notify||c.properties.indicate))||chars.find(c=>c.properties.notify||c.properties.indicate)};break;}}catch(error){log('BLE service '+serviceId+': '+error.message);}}if(!found)throw new Error('対応する BLE 書き込み先が見つかりません。通常の Bluetooth 接続を試してください。');this.writeChar=found.write;this.notify=found.notify;if(this.notify){this.notify.addEventListener('characteristicvaluechanged',this.onNotify);try{await this.notify.startNotifications();}catch(error){log('BLE 通知: '+error.message);}}if(this.closing){server.disconnect();throw new Error('接続を中止しました。');}this.connected=true;}
-  async send(bytes){if(!this.connected)throw new Error('BLE 接続が切れています。');for(let offset=0;offset<bytes.length;offset+=20){const part=bytes.slice(offset,offset+20);const promise=this.writeChar.properties.write?this.writeChar.writeValueWithResponse(part):this.writeChar.writeValueWithoutResponse(part);await timeout(promise,8000,'BLE の送信がタイムアウトしました。');}}
+  async send(bytes){
+    // 120 bytes = six ATT writes = ten complete 96-dot rows. Unlike 128-byte
+    // batches this avoids a short ATT write at every batch boundary.
+    // Keep ATT payloads <=20 bytes: Web Bluetooth does not expose the MTU.
+    for(let offset=0;offset<bytes.length;offset+=20){
+      if(!this.connected)throw new Error('BLE 接続が切れています。');
+      const part=bytes.slice(offset,offset+20);
+      // Prefer the streaming write mode when advertised (especially Android).
+      // Await every write; never retry ambiguously delivered raster bytes.
+      const trace=this.rasterTrace, started=trace?performance.now():0;
+      if(trace){trace.writes++;if(trace.firstStart===null)trace.firstStart=started;if(trace.lastEnd!==null)trace.maxIdle=Math.max(trace.maxIdle,started-trace.lastEnd);}
+      try{
+        const promise=this.writeChar.properties.writeWithoutResponse?this.writeChar.writeValueWithoutResponse(part):this.writeChar.writeValueWithResponse(part);
+        await timeout(promise,8000,'BLE の送信がタイムアウトしました。');
+        if(trace)trace.bytes+=part.length;
+      }finally{
+        if(trace){const ended=performance.now(),elapsed=ended-started;trace.writeMs+=elapsed;trace.maxWrite=Math.max(trace.maxWrite,elapsed);trace.lastEnd=ended;}
+      }
+    }
+  }
+  beginRasterTrace(expectedBytes){this.rasterTrace={expectedBytes,bytes:0,writes:0,firstStart:null,lastEnd:null,writeMs:0,maxWrite:0,maxIdle:0};}
+  endRasterTrace(){
+    const trace=this.rasterTrace;this.rasterTrace=null;if(!trace)return;
+    const elapsed=trace.firstStart===null?0:trace.lastEnd-trace.firstStart;
+    // API completion is host-side evidence only, even for acknowledged writes.
+    log('BLE raster host: '+trace.bytes+'/'+trace.expectedBytes+' bytes, '+trace.writes+' writes, '+(this.writeChar.properties.writeWithoutResponse?'without-response':'with-response')+', span '+elapsed.toFixed(1)+' ms, '+(elapsed>0?trace.bytes*1000/elapsed:0).toFixed(0)+' B/s, write avg/max '+(trace.writes?trace.writeMs/trace.writes:0).toFixed(1)+'/'+trace.maxWrite.toFixed(1)+' ms, idle max '+trace.maxIdle.toFixed(1)+' ms; '+(trace.bytes===trace.expectedBytes?'API complete':'incomplete')+'; printer receipt unverified');
+  }
   async close(){this.closing=true;this.connected=false;this.clearWaiters();this.notify?.removeEventListener('characteristicvaluechanged',this.onNotify);this.device.removeEventListener('gattserverdisconnected',this.onLost);if(this.device.gatt.connected)this.device.gatt.disconnect();}
 }
 function explainError(error){if(error.name==='NotFoundError')return 'デバイスの選択をキャンセルしたか、対象の機器が見つかりませんでした。';if(error.name==='NotAllowedError'||error.name==='SecurityError')return 'ブラウザの接続許可を確認してください。Chrome / Edge で HTML を直接開いて利用できます。';if(error.name==='NetworkError')return '接続を開けませんでした。他の印刷アプリを閉じ、P12Pro の送信側ポートを選んでください。';return error.message||String(error);}
@@ -215,7 +275,9 @@ async function printLabels(){if(busy||probing||connecting||!transport?.connected
     $('printInfo').textContent=(copy+1)+' / '+copies+' 枚目 · プリンターを準備しています…';
     for(const command of INIT){await tx.query(command,600);await delay(40);}
     log('TX raster header '+hex(header)+' / '+bytes.length+' bytes');await tx.send(header);await delay(80);
-    for(let offset=0;offset<bytes.length;offset+=tx.chunkSize){const chunk=bytes.slice(offset,offset+tx.chunkSize);await tx.send(chunk);await delay(tx.chunkDelay);const fraction=Math.min(offset+chunk.length,bytes.length)/bytes.length;progress((copy+fraction)/copies*100);$('printInfo').textContent=(copy+1)+' / '+copies+' 枚目 · データ送信 '+Math.round(fraction*100)+'%';}
+    tx.beginRasterTrace?.(bytes.length);
+    try{for(let offset=0;offset<bytes.length;offset+=tx.chunkSize){const chunk=bytes.slice(offset,offset+tx.chunkSize);await tx.send(chunk);await delay(tx.chunkDelay);const fraction=Math.min(offset+chunk.length,bytes.length)/bytes.length;progress((copy+fraction)/copies*100);$('printInfo').textContent=(copy+1)+' / '+copies+' 枚目 · データ送信 '+Math.round(fraction*100)+'%';}}
+    finally{tx.endRasterTrace?.();}
     await delay(150);log('TX feed '+hex(FEED)+' × 2');await tx.send(FEED);await delay(80);await tx.send(FEED);completed++;
     log('ラベル '+completed+'/'+copies+' 送信: '+labelLength+' mm, '+bytes.length+' bytes');
     // Leave time for tape movement; this is pacing, not a hardware completion acknowledgement.

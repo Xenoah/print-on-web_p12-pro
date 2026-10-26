@@ -1,0 +1,260 @@
+{
+  "kind": "Software simulation; NOT HCI/radio/physical-printer measurements",
+  "source": [
+    {
+      "version": "baseline",
+      "source_sha256": "d5d546356cae058993b071c377335a1d1e8dd78fd24c24bd759991bee9f017e1",
+      "profiles": [
+        {
+          "name": "api-1ms",
+          "withResponseMs": 1,
+          "withoutResponseMs": 1,
+          "packets": 240,
+          "bytes": 4800,
+          "transferMs": 5020,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 956.18
+        },
+        {
+          "name": "api-7.5ms",
+          "withResponseMs": 7.5,
+          "withoutResponseMs": 7.5,
+          "packets": 240,
+          "bytes": 4800,
+          "transferMs": 6580,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 729.48
+        },
+        {
+          "name": "api-15ms",
+          "withResponseMs": 15,
+          "withoutResponseMs": 15,
+          "packets": 240,
+          "bytes": 4800,
+          "transferMs": 8380,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 572.79
+        },
+        {
+          "name": "api-30ms",
+          "withResponseMs": 30,
+          "withoutResponseMs": 30,
+          "packets": 240,
+          "bytes": 4800,
+          "transferMs": 11980,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 400.67
+        },
+        {
+          "name": "asymmetric-15ms-1ms",
+          "withResponseMs": 15,
+          "withoutResponseMs": 1,
+          "packets": 240,
+          "bytes": 4800,
+          "transferMs": 8380,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 572.79
+        },
+        {
+          "name": "response-only-15ms",
+          "withResponseMs": 15,
+          "withoutResponseMs": 1,
+          "responseOnly": true,
+          "packets": 240,
+          "bytes": 4800,
+          "transferMs": 8380,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 572.79
+        }
+      ],
+      "invariants": [
+        "24 image/length cases independently decode pixel-for-pixel (including 2000 mm)",
+        "6 timing/write-mode profiles preserve init/header/raster/feed bytes with serialized writes"
+      ],
+      "lossInjection": {
+        "kind": "synthetic receiver packet omission, not observed loss",
+        "packetIndex": 20,
+        "omittedBytes": 20,
+        "rowPhaseShiftBytes": 8,
+        "changedPixels": 21110
+      }
+    },
+    {
+      "version": "previous-fix",
+      "source_sha256": "86f3b3baaeebca34d03be5df2adce1d6c28041856d0fc2343e5ae24c7268ba5a",
+      "profiles": [
+        {
+          "name": "api-1ms",
+          "withResponseMs": 1,
+          "withoutResponseMs": 1,
+          "packets": 263,
+          "bytes": 4800,
+          "transferMs": 1003,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 4785.64
+        },
+        {
+          "name": "api-7.5ms",
+          "withResponseMs": 7.5,
+          "withoutResponseMs": 7.5,
+          "packets": 263,
+          "bytes": 4800,
+          "transferMs": 2712.5,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 1769.59
+        },
+        {
+          "name": "api-15ms",
+          "withResponseMs": 15,
+          "withoutResponseMs": 15,
+          "packets": 263,
+          "bytes": 4800,
+          "transferMs": 4685,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 1024.55
+        },
+        {
+          "name": "api-30ms",
+          "withResponseMs": 30,
+          "withoutResponseMs": 30,
+          "packets": 263,
+          "bytes": 4800,
+          "transferMs": 8630,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 556.2
+        },
+        {
+          "name": "asymmetric-15ms-1ms",
+          "withResponseMs": 15,
+          "withoutResponseMs": 1,
+          "packets": 263,
+          "bytes": 4800,
+          "transferMs": 1003,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 4785.64
+        },
+        {
+          "name": "response-only-15ms",
+          "withResponseMs": 15,
+          "withoutResponseMs": 1,
+          "responseOnly": true,
+          "packets": 263,
+          "bytes": 4800,
+          "transferMs": 4685,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 1024.55
+        }
+      ],
+      "invariants": [
+        "24 image/length cases independently decode pixel-for-pixel (including 2000 mm)",
+        "6 timing/write-mode profiles preserve init/header/raster/feed bytes with serialized writes",
+        "4 failure cases stop without retry/feed, clear waiters and release busy state"
+      ],
+      "lossInjection": {
+        "kind": "synthetic receiver packet omission, not observed loss",
+        "packetIndex": 21,
+        "omittedBytes": 20,
+        "rowPhaseShiftBytes": 8,
+        "changedPixels": 21185
+      }
+    },
+    {
+      "version": "revised",
+      "source_sha256": "d828bf6d1c9220a98a3832d33d17d75a4881b6af99d9ae3bec3496f6d8b520db",
+      "profiles": [
+        {
+          "name": "api-1ms",
+          "withResponseMs": 1,
+          "withoutResponseMs": 1,
+          "packets": 240,
+          "bytes": 4800,
+          "transferMs": 1020,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 4705.88
+        },
+        {
+          "name": "api-7.5ms",
+          "withResponseMs": 7.5,
+          "withoutResponseMs": 7.5,
+          "packets": 240,
+          "bytes": 4800,
+          "transferMs": 2580,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 1860.47
+        },
+        {
+          "name": "api-15ms",
+          "withResponseMs": 15,
+          "withoutResponseMs": 15,
+          "packets": 240,
+          "bytes": 4800,
+          "transferMs": 4380,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 1095.89
+        },
+        {
+          "name": "api-30ms",
+          "withResponseMs": 30,
+          "withoutResponseMs": 30,
+          "packets": 240,
+          "bytes": 4800,
+          "transferMs": 7980,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 601.5
+        },
+        {
+          "name": "asymmetric-15ms-1ms",
+          "withResponseMs": 15,
+          "withoutResponseMs": 1,
+          "packets": 240,
+          "bytes": 4800,
+          "transferMs": 1020,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 4705.88
+        },
+        {
+          "name": "response-only-15ms",
+          "withResponseMs": 15,
+          "withoutResponseMs": 1,
+          "responseOnly": true,
+          "packets": 240,
+          "bytes": 4800,
+          "transferMs": 4380,
+          "maxGapMs": 20,
+          "sha256": "903dd1517457193deaeb84de3ad8af7b2a07528ffffcbac339e664fd456211f2",
+          "bytesPerSec": 1095.89
+        }
+      ],
+      "invariants": [
+        "24 image/length cases independently decode pixel-for-pixel (including 2000 mm)",
+        "6 timing/write-mode profiles preserve init/header/raster/feed bytes with serialized writes",
+        "4 failure cases stop without retry/feed, clear waiters and release busy state",
+        "host timing/completion diagnostics match the independent capture, including failed and timed-out writes"
+      ],
+      "lossInjection": {
+        "kind": "synthetic receiver packet omission, not observed loss",
+        "packetIndex": 20,
+        "omittedBytes": 20,
+        "rowPhaseShiftBytes": 8,
+        "changedPixels": 21110
+      }
+    }
+  ]
+}
